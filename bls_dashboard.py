@@ -1,64 +1,50 @@
 import streamlit as st
 import requests
+import json
 import pandas as pd
 
+# Set your BLS API key here
+API_KEY = '20c55f395a724712bd7c4f5dca5dc0cb'
+
+# Function to get the latest BLS data using API
 def get_bls_data():
-    url = "https://api.bls.gov/publicAPI/v2/timeseries/data/LAUCN040010000000003?registrationKey=20c55f395a724712bd7c4f5dca5dc0cb"
-    
+    # Set the URL to query the API
+    url = f'https://api.bls.gov/publicAPI/v2/timeseries/data/LAUCN040010000000003?registrationKey={API_KEY}'
     response = requests.get(url)
     
+    # If the response is valid, load the data
     if response.status_code == 200:
-        st.write("Raw Response Data:")
-        st.json(response.json())  # Display the raw JSON response for inspection
-        return response.json()
-    else:
-        st.error("Failed to retrieve data from BLS API.")
-        return None
-
-def process_data(data):
-    try:
-        # The raw data is inside 'Results' -> 'series' -> 'data'
-        data_list = data['Results']['series'][0]['data']
+        data = response.json()
         
-        # Create a DataFrame
-        df = pd.DataFrame(data_list)
+        # Extracting the data we need (time series data)
+        series_data = data['Results']['series'][0]['data']
         
-        # Convert 'year' and 'period' to a proper date format
-        df['date'] = df['year'] + "-" + df['period'].str[1:]
+        # Creating a DataFrame to display the data
+        df = pd.DataFrame(series_data)
+        
+        # Convert the "year", "period", and "value" columns to appropriate types
+        df['year'] = df['year'].astype(int)
         df['value'] = pd.to_numeric(df['value'], errors='coerce')
-        
-        # Drop any rows with missing values
-        df = df.dropna()
+        df['period'] = df['period'].str.slice(1)
+        df['period_name'] = df['period'].apply(lambda x: {
+            'M01': 'January', 'M02': 'February', 'M03': 'March',
+            'M04': 'April', 'M05': 'May', 'M06': 'June',
+            'M07': 'July', 'M08': 'August', 'M09': 'September',
+            'M10': 'October', 'M11': 'November', 'M12': 'December'
+        }.get(x, 'Unknown'))
         
         return df
-    except Exception as e:
-        st.error(f"Error processing data: {e}")
+    else:
+        st.error("Error fetching data from BLS API")
         return None
 
-# Function to display the dashboard
-def display_dashboard():
-    st.title("U.S. Bureau of Labor Statistics - Employment Data")
+# Streamlit app layout
+st.title('U.S. Bureau of Labor Statistics - Employment Data')
+st.write('This dashboard displays the latest U.S. employment data based on BLS API.')
 
-    # Fetch BLS data
-    data = get_bls_data()
+# Fetch and display data
+df = get_bls_data()
 
-    if data:
-        # Process and display the data
-        df = process_data(data)
-        
-        if df is not None:
-            st.subheader(f"Series: {data['Results']['series'][0]['seriesID']}")
-            
-            # Display the DataFrame
-            st.write(df)
-            
-            # You can also plot the data over time
-            st.line_chart(df.set_index('date')['value'])
-        else:
-            st.error("Failed to process data.")
-    else:
-        st.error("Failed to fetch data.")
-
-# Run the dashboard
-if __name__ == "__main__":
-    display_dashboard()
+if df is not None:
+    st.subheader("Latest Employment Data")
+    st.write(df)
